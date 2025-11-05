@@ -303,7 +303,8 @@ func (c *config) handleRPC(
 	case *stats.InPayload:
 		if gctx != nil {
 			messageId = atomic.AddInt64(&gctx.inMessages, 1)
-			inSize.RecordSet(ctx, int64(rs.Length), gctx.metricAttrSet)
+			metricAttrs := buildMetricAttrsWithLabeler(ctx, gctx, direction)
+			inSize.RecordSet(ctx, int64(rs.Length), attribute.NewSet(metricAttrs...))
 		}
 
 		if c.ReceivedEvent && span.IsRecording() {
@@ -319,7 +320,8 @@ func (c *config) handleRPC(
 	case *stats.OutPayload:
 		if gctx != nil {
 			messageId = atomic.AddInt64(&gctx.outMessages, 1)
-			outSize.RecordSet(ctx, int64(rs.Length), gctx.metricAttrSet)
+			metricAttrs := buildMetricAttrsWithLabeler(ctx, gctx, direction)
+			outSize.RecordSet(ctx, int64(rs.Length), attribute.NewSet(metricAttrs...))
 		}
 
 		if c.SentEvent && span.IsRecording() {
@@ -388,4 +390,15 @@ func (c *config) handleRPC(
 	default:
 		return
 	}
+}
+
+func buildMetricAttrsWithLabeler(ctx context.Context, gctx *gRPCContext, direction LabelerDirection) []attribute.KeyValue {
+	metricAttrs := make([]attribute.KeyValue, 0, len(gctx.metricAttrs))
+	metricAttrs = append(metricAttrs, gctx.metricAttrs...)
+	labeler, ok := LabelerFromContext(ctx, direction)
+	if ok {
+		metricAttrs = append(metricAttrs, labeler.Get()...)
+	}
+
+	return metricAttrs
 }
