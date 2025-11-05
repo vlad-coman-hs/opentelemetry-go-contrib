@@ -30,29 +30,65 @@ func (l *Labeler) Get() []attribute.KeyValue {
 	defer l.mu.Unlock()
 	ret := make([]attribute.KeyValue, len(l.attributes))
 	copy(ret, l.attributes)
+
 	return ret
 }
 
-type labelerContextKeyType int
+// LabelerDirection indicates whether the Labeler applies to the client or to the server.
+type LabelerDirection int
 
-const labelerContextKey labelerContextKeyType = 0
+const (
+	// ClientLabelerDirection specifies that the labeler applies to the client.
+	ClientLabelerDirection LabelerDirection = iota
+	// ServerLabelerDirection specifies that the labeler applies to the server.
+	ServerLabelerDirection
+)
+
+type labelerContextKeyType string
+
+const (
+	clientContextKey labelerContextKeyType = "otelgrpc.client.labeler"
+	serverContextKey labelerContextKeyType = "otelgrpc.server.labeler"
+)
 
 // ContextWithLabeler returns a new context with the provided Labeler instance.
-// Attributes added to the specified labeler will be injected into metrics
-// emitted by the instrumentation. Only one labeller can be injected into the
-// context. Injecting it multiple times will override the previous calls.
-func ContextWithLabeler(parent context.Context, l *Labeler) context.Context {
-	return context.WithValue(parent, labelerContextKey, l)
+// Attributes added to the Labeler will be injected into metrics
+// emitted by the instrumentation associated with the specified LabelerDirection.
+//
+// Only one Labeler can be injected for the same direction.
+// Injecting a Labeler for the same direction will override the previous call.
+func ContextWithLabeler(parent context.Context, l *Labeler, direction LabelerDirection) context.Context {
+	switch direction {
+	case ClientLabelerDirection:
+		return context.WithValue(parent, clientContextKey, l)
+	case ServerLabelerDirection:
+		return context.WithValue(parent, serverContextKey, l)
+	default:
+		return parent
+	}
 }
 
-// LabelerFromContext retrieves a Labeler instance from the provided context if
-// one is available.  If no Labeler was found in the provided context a new, empty
-// Labeler is returned and the second return value is false.  In this case it is
-// safe to use the Labeler but any attributes added to it will not be used.
-func LabelerFromContext(ctx context.Context) (*Labeler, bool) {
-	l, ok := ctx.Value(labelerContextKey).(*Labeler)
-	if !ok {
-		l = &Labeler{}
+// LabelerFromContext retrieves a Labeler instance from the provided context if one is available for
+// the specified LabelerDirection.
+//
+// If no Labeler was found in the provided context a new, empty Labeler
+// for the specified direction is returned and the second return value is false.
+// In this case it is safe to use the Labeler but any attributes added to it will not be used.
+func LabelerFromContext(ctx context.Context, direction LabelerDirection) (*Labeler, bool) {
+	var key labelerContextKeyType
+	switch direction {
+	case ClientLabelerDirection:
+		key = clientContextKey
+	case ServerLabelerDirection:
+		key = serverContextKey
+	default:
+		return &Labeler{}, false
 	}
-	return l, ok
+
+	l, ok := ctx.Value(key).(*Labeler)
+	if ok {
+		return l, true
+	}
+
+	return &Labeler{}, false
 }

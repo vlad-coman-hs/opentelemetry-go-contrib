@@ -139,9 +139,9 @@ func (h *serverHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) cont
 	}
 	gctx.metricAttrSet = attribute.NewSet(gctx.metricAttrs...)
 
-	labeler, found := LabelerFromContext(ctx)
+	labeler, found := LabelerFromContext(ctx, ServerLabelerDirection)
 	if !found {
-		ctx = ContextWithLabeler(ctx, labeler)
+		ctx = ContextWithLabeler(ctx, labeler, ServerLabelerDirection)
 	}
 
 	return context.WithValue(ctx, gRPCContextKey{}, &gctx)
@@ -158,6 +158,7 @@ func (h *serverHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
 		h.inMsg.Inst(),
 		h.outMsg.Inst(),
 		serverStatus,
+		ServerLabelerDirection,
 	)
 }
 
@@ -262,6 +263,7 @@ func (h *clientHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
 		func(s *status.Status) (codes.Code, string) {
 			return codes.Error, s.Message()
 		},
+		ClientLabelerDirection,
 	)
 }
 
@@ -286,6 +288,7 @@ func (c *config) handleRPC(
 	inSize, outSize int64Hist,
 	inMsg, outMsg metric.Int64Histogram,
 	recordStatus func(*status.Status) (codes.Code, string),
+	direction LabelerDirection,
 ) {
 	gctx, _ := ctx.Value(gRPCContextKey{}).(*gRPCContext)
 	if gctx != nil && !gctx.record {
@@ -364,7 +367,7 @@ func (c *config) handleRPC(
 			metricAttrs = append(metricAttrs, gctx.metricAttrs...)
 		}
 
-		labeler, ok := LabelerFromContext(ctx)
+		labeler, ok := LabelerFromContext(ctx, direction)
 		if ok {
 			metricAttrs = append(metricAttrs, labeler.Get()...)
 		}
