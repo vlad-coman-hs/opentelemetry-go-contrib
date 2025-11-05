@@ -139,6 +139,11 @@ func (h *serverHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) cont
 	}
 	gctx.metricAttrSet = attribute.NewSet(gctx.metricAttrs...)
 
+	labeler, found := LabelerFromContext(ctx)
+	if !found {
+		ctx = ContextWithLabeler(ctx, labeler)
+	}
+
 	return context.WithValue(ctx, gRPCContextKey{}, &gctx)
 }
 
@@ -358,6 +363,12 @@ func (c *config) handleRPC(
 			metricAttrs = make([]attribute.KeyValue, 0, len(gctx.metricAttrs)+1)
 			metricAttrs = append(metricAttrs, gctx.metricAttrs...)
 		}
+
+		labeler, ok := LabelerFromContext(ctx)
+		if ok {
+			metricAttrs = append(metricAttrs, labeler.Get()...)
+		}
+
 		metricAttrs = append(metricAttrs, rpcStatusAttr)
 		// Allocate vararg slice once.
 		recordOpts := []metric.RecordOption{metric.WithAttributeSet(attribute.NewSet(metricAttrs...))}
